@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hold the Line – urge and streak tracker</title>
+<style>
+:root{
+  --bg:#fff; --card:#fff; --ink:#000; --muted:#555; --line:#000; --track:#ddd;
+  --teal:#000; --tealtext:#fff; --sand:#eee; --alert:#000; --ok:#000;
+  --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#000; --card:#000; --ink:#fff; --muted:#aaa; --line:#666; --track:#333;
+    --teal:#fff; --tealtext:#000; --sand:#222; --alert:#fff; --ok:#fff}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 80px}
+h1{font:700 1.6rem/1.2 var(--serif);margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 24px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);padding:10px 16px;border-radius:10px}
+button:hover{border-color:var(--teal)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+button.primary{background:var(--teal);color:var(--tealtext);border-color:var(--teal);font-weight:600}
+button.danger{color:var(--alert);border-color:var(--alert)}
+button.small{padding:6px 10px;font-size:.85rem}
+.habit{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+.habit header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.habit h2{margin:0;font:600 1.15rem var(--sans)}
+.streak{font:700 2.6rem/1.1 var(--serif);font-variant-numeric:tabular-nums;margin:14px 0 2px;letter-spacing:-.02em}
+.streak small{font:500 1rem var(--sans);color:var(--muted);letter-spacing:0}
+.meta{color:var(--muted);font-size:.92rem}
+.stats{display:flex;flex-wrap:wrap;gap:8px 22px;margin:12px 0 16px;font-size:.92rem}
+.stats b{font-weight:700}
+.bar{height:8px;background:var(--track);border-radius:6px;overflow:hidden;margin:6px 0 4px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.urge{width:100%;padding:16px;font-size:1.1rem;border-radius:12px}
+.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+details{margin-top:14px;font-size:.92rem}
+summary{cursor:pointer;color:var(--muted)}
+ul.log{list-style:none;padding:0;margin:8px 0 0}
+ul.log li{padding:6px 0;border-top:1px solid var(--line)}
+.tag{display:inline-block;padding:0 8px;border-radius:8px;font-size:.8rem;margin-right:6px;background:var(--sand)}
+.tag.slip{text-decoration:line-through}
+form.add{display:grid;gap:10px;background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:18px;margin-bottom:24px}
+form.add label{font-size:.9rem;color:var(--muted);display:grid;gap:4px}
+input[type=text],input[type=number],input[type=datetime-local]{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:100%}
+footer{margin-top:32px;font-size:.88rem;color:var(--muted)}
+footer p{margin:6px 0}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+#cloud{border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:24px;display:none}
+#cloud h2{margin:0 0 4px;font:600 1.05rem var(--sans)}
+#cloud .row input{flex:1;min-width:140px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+#cloudStatus{font-size:.88rem;color:var(--muted);margin-top:8px;min-height:1.3em}
+/* urge overlay */
+#overlay{position:fixed;inset:0;background:#000;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;z-index:10;overflow:auto}
+#overlay.on{display:flex}
+#overlay h2{font:600 1.3rem var(--serif);margin:0}
+#orb{width:170px;height:170px;border-radius:50%;background:#fff;opacity:.9;transform:scale(.6);transition:transform 4s ease-in-out}
+#phase{font:700 1.6rem var(--serif);min-height:2rem}
+#clock{font:600 2.4rem var(--serif);font-variant-numeric:tabular-nums}
+#prompt{max-width:30ch;min-height:3.5em;font-size:1.05rem}
+#overlay button{background:transparent;color:#fff;border-color:#fff}
+#overlay button.go{background:#fff;color:#000;font-weight:700}
+@media (prefers-reduced-motion:reduce){#orb{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Hold the line</h1>
+  <p class="sub">Track what you're quitting. Ride out urges. Everything stays on this device.</p>
+
+  <section id="cloud" aria-label="Cloud sync">
+    <h2>Cloud sync</h2>
+    <div class="meta" id="cloudWho">Sign in to save your data on a server and use it on every device.</div>
+    <div class="row" id="cloudOut">
+      <input type="email" id="cEmail" placeholder="Email" autocomplete="email" aria-label="Email">
+      <input type="password" id="cPass" placeholder="Password (6+ characters)" autocomplete="current-password" aria-label="Password">
+      <button class="primary" id="cIn">Sign in</button>
+      <button id="cUp">Create account</button>
+    </div>
+    <div class="row" id="cloudIn" hidden>
+      <button id="cSync">Sync now</button>
+      <button id="cOut">Sign out</button>
+    </div>
+    <div id="cloudStatus" role="status"></div>
+  </section>
+
+  <form class="add" id="addForm">
+    <label>What are you quitting or limiting?
+      <input type="text" id="name" required maxlength="40" placeholder="e.g. Smoking, Gaming, Social media">
+    </label>
+    <label>Last time you did it (your streak starts here)
+      <input type="datetime-local" id="start" required>
+    </label>
+    <label>Money it used to cost per day (optional)
+      <input type="number" id="cost" min="0" step="any" placeholder="0">
+    </label>
+    <button class="primary" type="submit">Start tracking</button>
+  </form>
+
+  <div id="habits"></div>
+
+  <footer>
+    <div class="row">
+      <button class="small" id="exportBtn">Export backup</button>
+      <button class="small" id="importBtn">Import backup</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <p>Data lives in your browser only. Clearing site data erases it, so export a backup now and then.</p>
+    <p>If an addiction is putting your health or safety at risk, or you feel you might hurt yourself, contact a local doctor, a helpline, or emergency services. Stopping some substances (alcohol, benzodiazepines) suddenly can be dangerous without medical supervision.</p>
+  </footer>
+</main>
+
+<section id="overlay" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+  <h2 id="ovTitle">Urges peak and pass. Ride this one out.</h2>
+  <div id="orb" aria-hidden="true"></div>
+  <div id="phase" aria-live="polite">Get ready</div>
+  <div id="clock" aria-label="Time left">10:00</div>
+  <div id="prompt"></div>
+  <div class="row">
+    <button class="go" id="passed">The urge passed</button>
+    <button id="slipped">I slipped</button>
+    <button id="closeOv">Close</button>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ---- Cloud sync settings: paste your Supabase values here ---- */
+const SUPABASE_URL='YOUR_SUPABASE_URL';
+const SUPABASE_KEY='YOUR_SUPABASE_ANON_KEY';
+/* -------------------------------------------------------------- */
+const KEY='holdtheline.v1';
+let habits=[];
+try{habits=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){habits=[]}
+const META=KEY+'.updated';
+let updatedAt=0;try{updatedAt=+localStorage.getItem(META)||0}catch(e){}
+const save=(fromCloud)=>{
+  if(fromCloud!==true)updatedAt=Date.now();
+  try{localStorage.setItem(KEY,JSON.stringify(habits));localStorage.setItem(META,String(updatedAt))}catch(e){}
+  if(fromCloud!==true)queuePush();
+};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DAY=864e5, HOUR=36e5, MIN=6e4;
+
+const MILESTONES=[1,3,7,14,30,60,90,180,365];
+
+function fmt(ms){
+  const d=Math.floor(ms/DAY), h=Math.floor(ms%DAY/HOUR), m=Math.floor(ms%HOUR/MIN);
+  return {d,h,m};
+}
+function liveHtml(ms){
+  const s=Math.floor(ms/1000), d=Math.floor(s/86400), hh=Math.floor(s%86400/3600), m=Math.floor(s%3600/60), x=s%60;
+  return `${d}<small> d </small>${hh}<small> h </small>${m}<small> m </small>${x}<small> s</small>`;
+}
+function bestMs(h){
+  const past=(h.streaks||[]).reduce((a,r)=>Math.max(a,r.to-r.from),0);
+  return Math.max(h.best||0, past, Date.now()-h.start);
+}
+function span(ms){const t=fmt(ms);const s=Math.floor(ms%MIN/1000);return `${t.d}d ${t.h}h ${t.m}m ${s}s`}
+function render(){
+  const box=$('#habits');
+  if(!habits.length){box.innerHTML='<div class="empty">Nothing tracked yet. Add your first habit above.</div>';return}
+  box.innerHTML=habits.map(h=>{
+    const ms=Date.now()-h.start, t=fmt(ms);
+    const next=MILESTONES.find(x=>x*DAY>ms);
+    const pct=next?Math.min(100,ms/(next*DAY)*100):100;
+    const saved=h.cost?((ms/DAY)*h.cost):0;
+    const wins=h.log.filter(l=>l.type==='win').length;
+    const slips=h.log.filter(l=>l.type==='slip').length;
+        const past=(h.streaks||[]).slice().reverse().map(r=>`<li><b>${span(r.to-r.from)}</b> <span class="meta">${new Date(r.from).toLocaleDateString()} to ${new Date(r.to).toLocaleDateString()}</span></li>`).join('');
+    const log=h.log.slice().reverse().slice(0,30).map(l=>
+      `<li><span class="tag ${l.type}">${l.type==='win'?'urge survived':'slip'}</span>${new Date(l.t).toLocaleString()}${l.note?' – '+esc(l.note):''}</li>`).join('');
+    return `<article class="habit" data-id="${h.id}">
+      <header><h2>${esc(h.name)}</h2><button class="small danger" data-act="del">Delete</button></header>
+      <div class="streak" data-live="${h.id}" aria-label="Time restrained">${liveHtml(ms)}</div>
+      <div class="meta">${next?`Next milestone: ${next} day${next>1?'s':''}`:'Over a year. Keep going.'}</div>
+      <div class="bar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+      <div class="stats">
+        <span>Longest restraint: <b data-best="${h.id}">${span(bestMs(h))}</b></span>
+        <span>Urges survived: <b>${wins}</b></span>
+        <span>Slips: <b>${slips}</b></span>
+        ${h.cost?`<span>Saved: <b>${saved.toFixed(2)}</b></span>`:''}
+      </div>
+      <button class="primary urge" data-act="urge">I have an urge right now</button>
+      <div class="row"><button class="small" data-act="slip">Log a slip</button></div>
+      <details><summary>Past restraint records (${(h.streaks||[]).length})</summary>
+        <ul class="log">${past||'<li>No finished streaks yet. Each one is saved here when it ends.</li>'}</ul></details>
+      <details><summary>Urge and slip log (${h.log.length})</summary>
+        <ul class="log">${log||'<li>No entries yet.</li>'}</ul></details>
+    </article>`}).join('');
+}
+
+/* add habit */
+function nowLocal(){const d=new Date(Date.now()-new Date().getTimezoneOffset()*MIN);return d.toISOString().slice(0,16)}
+$('#start').value=nowLocal(); $('#start').max=nowLocal();
+$('#addForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const start=new Date($('#start').value).getTime();
+  habits.push({id:Date.now().toString(36),name:$('#name').value.trim(),start:isNaN(start)?Date.now():Math.min(start,Date.now()),
+    cost:parseFloat($('#cost').value)||0,best:0,log:[]});
+  save();e.target.reset();$('#start').value=nowLocal();render();
+});
+
+/* card actions */
+let current=null;
+$('#habits').addEventListener('click',e=>{
+  const btn=e.target.closest('button[data-act]');if(!btn)return;
+  const h=habits.find(x=>x.id===btn.closest('.habit').dataset.id);if(!h)return;
+  const act=btn.dataset.act;
+  if(act==='urge'){openUrge(h)}
+  if(act==='slip'){doSlip(h)}
+  if(act==='del'){if(confirm('Delete "'+h.name+'" and its history?')){habits=habits.filter(x=>x!==h);save();render()}}
+});
+function doSlip(h){
+  const note=prompt('Slips happen. What was happening just before? (optional, helps you spot triggers)');
+  if(note===null)return;
+  h.streaks=h.streaks||[];h.streaks.push({from:h.start,to:Date.now()});
+  h.best=Math.max(h.best||0,Date.now()-h.start);
+  h.log.push({t:Date.now(),type:'slip',note:note.trim()});
+  h.start=Date.now();save();render();
+}
+
+/* urge surfing overlay */
+const PROMPTS=[
+ 'This feeling is a wave. It rises, peaks, and falls on its own.',
+ 'You do not have to fight it. Just watch it and keep breathing.',
+ 'Stand up, drink some water, change the room you are in.',
+ 'Think of the person you want to be a month from now.',
+ 'Most urges fade in 10 to 20 minutes. You only need to outlast this one.',
+ 'Text or call someone. Saying it out loud takes its power away.',
+ 'Where do you feel it in your body? Just notice it. No need to act.',
+ 'Every urge you outlast makes the next one weaker.'
+];
+const CYCLE=[['Breathe in',4],['Hold',4],['Breathe out',6]];
+let timers=[],endAt=0;
+function openUrge(h){
+  current=h;endAt=Date.now()+10*MIN;
+  $('#overlay').classList.add('on');$('#passed').focus();
+  let ci=0,pi=0;
+  const orb=$('#orb');
+  const step=()=>{
+    const [label,sec]=CYCLE[ci%3];
+    $('#phase').textContent=label;
+    orb.style.transitionDuration=sec+'s';
+    orb.style.transform=label==='Breathe in'?'scale(1)':label==='Breathe out'?'scale(.6)':orb.style.transform;
+    timers.push(setTimeout(step,sec*1000));ci++;
+  };
+  const tick=()=>{
+    const left=Math.max(0,endAt-Date.now());
+    $('#clock').textContent=String(Math.floor(left/MIN)).padStart(2,'0')+':'+String(Math.floor(left%MIN/1000)).padStart(2,'0');
+    if(!left)$('#prompt').textContent='Ten minutes done. How strong is it now?';
+  };
+  $('#prompt').textContent=PROMPTS[0];
+  timers.push(setInterval(tick,500));
+  timers.push(setInterval(()=>{if(endAt-Date.now()>0)$('#prompt').textContent=PROMPTS[++pi%PROMPTS.length]},15000));
+  step();tick();
+}
+function closeUrge(){
+  timers.forEach(t=>{clearTimeout(t);clearInterval(t)});timers=[];
+  $('#overlay').classList.remove('on');$('#orb').style.transform='scale(.6)';current=null;
+}
+$('#passed').onclick=()=>{
+  if(current){const note=prompt('What helped? (optional)')||'';
+    current.log.push({t:Date.now(),type:'win',note:note.trim()});save()}
+  closeUrge();render();
+};
+$('#slipped').onclick=()=>{const h=current;closeUrge();if(h)doSlip(h)};
+$('#closeOv').onclick=closeUrge;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&current)closeUrge()});
+
+/* cloud sync (Supabase) */
+let sb=null,user=null,pushT=null;
+const cloudReady=SUPABASE_URL.indexOf('YOUR_')<0&&SUPABASE_KEY.indexOf('YOUR_')<0&&window.supabase;
+const status=t=>{$('#cloudStatus').textContent=t};
+function panel(){
+  $('#cloudOut').hidden=!!user;$('#cloudIn').hidden=!user;
+  $('#cloudWho').textContent=user?'Signed in as '+user.email:'Sign in to save your data on a server and use it on every device.';
+}
+function queuePush(){
+  if(!sb||!user)return;
+  clearTimeout(pushT);status('Saving…');pushT=setTimeout(push,1500);
+}
+async function push(){
+  const {error}=await sb.from('app_data').upsert({user_id:user.id,data:habits,updated_at:new Date(updatedAt||Date.now()).toISOString()});
+  status(error?'Could not save to the server: '+error.message+' (your data is still safe on this device)':'Saved to the server at '+new Date().toLocaleTimeString());
+}
+async function pull(first){
+  status('Syncing…');
+  const {data,error}=await sb.from('app_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();
+  if(error){status('Could not reach the server: '+error.message);return}
+  if(!data){if(habits.length||true)await push();return}
+  const remoteT=new Date(data.updated_at).getTime();
+  let useCloud=remoteT>updatedAt;
+  if(first&&habits.length&&JSON.stringify(habits)!==JSON.stringify(data.data)){
+    useCloud=confirm('The server already has saved data (last updated '+new Date(remoteT).toLocaleString()+').\n\nOK = load the server data onto this device.\nCancel = replace the server data with what is on this device.');
+  }
+  if(useCloud){habits=Array.isArray(data.data)?data.data:[];updatedAt=remoteT;save(true);render();status('Loaded your data from the server.')}
+  else if(updatedAt!==remoteT){await push()}
+  else status('Already up to date.');
+}
+if(cloudReady){
+  $('#cloud').style.display='block';
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  sb.auth.onAuthStateChange((_e,session)=>{
+    const was=user;user=session?session.user:null;panel();
+    if(user&&(!was||was.id!==user.id))pull(true);
+  });
+  const creds=()=>({email:$('#cEmail').value.trim(),password:$('#cPass').value});
+  $('#cIn').onclick=async()=>{const c=creds();if(!c.email||!c.password){status('Enter your email and password.');return}
+    status('Signing in…');const {error}=await sb.auth.signInWithPassword(c);status(error?error.message:'')};
+  $('#cUp').onclick=async()=>{const c=creds();if(!c.email||c.password.length<6){status('Enter an email and a password of 6+ characters.');return}
+    status('Creating account…');const {data,error}=await sb.auth.signUp(c);
+    status(error?error.message:(data.session?'':'Check your email to confirm the account, then sign in.'))};
+  $('#cOut').onclick=async()=>{await sb.auth.signOut();status('Signed out. Your data stays on this device.')};
+  $('#cSync').onclick=()=>pull(false);
+}
+
+/* backup */
+$('#exportBtn').onclick=()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(habits,null,2)],{type:'application/json'}));
+  a.download='hold-the-line-backup.json';a.click();URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{
+    const d=JSON.parse(r.result);
+    if(!Array.isArray(d)||!d.every(x=>x&&typeof x.name==='string'&&typeof x.start==='number'&&Array.isArray(x.log)))throw 0;
+    if(confirm('Replace current data with this backup?')){habits=d;save();render()}
+  }catch(err){alert('That file is not a valid backup.')}};
+  r.readAsText(f);e.target.value='';
+};
+
+render();
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+setInterval(()=>{
+  const now=Date.now();
+  habits.forEach(h=>{
+    const a=document.querySelector(`[data-live="${h.id}"]`);if(a)a.innerHTML=liveHtml(now-h.start);
+    const b=document.querySelector(`[data-best="${h.id}"]`);if(b)b.textContent=span(bestMs(h));
+  });
+},1000);
+setInterval(()=>{if(!$('#overlay').classList.contains('on')&&!document.querySelector('details[open]'))render()},60000);
+</script>
+</body>
+</html>
